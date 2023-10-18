@@ -1,53 +1,95 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const path = require('path'); // For serving static files in production
+const session = require('express-session');
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+const User = require('./model/User'); // Define the User model
+
 const app = express();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 9019;
 
-require('dotenv').config(); // Load environment variables
-
-// Middleware
-app.use(bodyParser.json());
-app.use(cors());
-
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI, {
+mongoose.connect('mongodb+srv://manoharmns04:manoharmns04@cluster0.5icxotm.mongodb.net/', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  useCreateIndex: true,
-  useFindAndModify: false,
 });
 
-const connection = mongoose.connection;
-connection.once('open', () => {
-  console.log('MongoDB database connection established successfully');
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  session({
+    secret: 'manoharmakarla',
+    resave: false,
+    saveUninitialized: true,
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.use(
+  new LocalStrategy(User.authenticate())
+);
+
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+// Define API routes for registration, login, and logout
+
+app.post('/register', async (req, res) => {
+  try {
+    const { username, password, role } = req.body;
+
+    // Check if any of the required fields are empty
+    if (!username || !password || !role) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+
+    // Check if the username already exists
+    const existingUser = await User.findOne({ username });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username already exists.' });
+    }
+
+    const user = new User({ username, role });
+    await User.register(user, password); // Using passport-local-mongoose for registration
+    res.status(201).json({ message: 'User registered successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ error: 'Registration failed.' });
+  }
 });
 
-// Routes
-const authRoutes = require('./routes/auth');
-const productRoutes = require('./routes/products');
-const categoryRoutes = require('./routes/categories');
-const invoiceRoutes = require('./routes/invoices');
-const saleRoutes = require('./routes/sales');
-const reportRoutes = require('./routes/reports');
 
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/invoices', invoiceRoutes);
-app.use('/api/sales', saleRoutes);
-app.use('/api/reports', reportRoutes);
 
-// Serve static assets in production (build folder)
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static('client/build'));
+app.post('/login', (req, res, next) => {
+  passport.authenticate('local', (err, user, info) => {
+    if (err) {
+      return res.status(500).json({ error: 'An error occurred during authentication.' });
+    }
 
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
-  });
-}
+    if (!user) {
+      // If the user is null, it means the username does not exist
+      return res.status(401).json({ error: 'Username not found' });
+    }
+
+    req.logIn(user, (loginErr) => {
+      if (loginErr) {
+        return res.status(500).json({ error: 'An error occurred during login.' });
+      }
+
+      // Authentication succeeded, handle login logic here
+      return res.status(200).json({ message: 'Login successful' });
+    });
+  })(req, res, next);
+});
+
+
+app.get('/logout', (req, res) => {
+  req.logout();
+  res.status(200).json({ message: 'Logout successful' });
+});
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
