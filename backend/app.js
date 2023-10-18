@@ -4,9 +4,10 @@ const session = require('express-session');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const User = require('./model/User'); // Define the User model
-
+const bodyParser = require('body-parser');
+const shopRoutes = require('./routes/shop');
 const app = express();
-const port = process.env.PORT || 9019;
+const port = process.env.PORT || 9010;
 
 mongoose.connect('mongodb+srv://manoharmns04:manoharmns04@cluster0.5icxotm.mongodb.net/', {
   useNewUrlParser: true,
@@ -26,7 +27,8 @@ app.use(
 
 app.use(passport.initialize());
 app.use(passport.session());
-
+app.use(bodyParser.json());
+app.use('/api', shopRoutes);
 passport.use(
   new LocalStrategy(User.authenticate())
 );
@@ -90,6 +92,7 @@ app.get('/logout', (req, res) => {
   req.logout();
   res.status(200).json({ message: 'Logout successful' });
 });
+
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
